@@ -1,0 +1,690 @@
+// src/services/election.service.ts
+import * as userRepo from "../repositories/user.repository";
+import * as constituencyRepo from "../repositories/constituency.repository";
+import * as partyRepo from "../repositories/party.repository";
+import * as candidateRepo from "../repositories/candidate.repository";
+import { uploadToSupabase, deleteFromSupabase } from "./upload.service";
+
+export class ElectionService {
+  /**
+   * สร้างพรรคการเมืองใหม่ (EC only)
+   */
+  public createParty = async (data: {
+    name: string;
+    logoUrl?: string;
+    policy?: string;
+  }) => {
+    if (!data.name || data.name.trim() === "") {
+      throw new Error("กรุณาระบุชื่อพรรค");
+    }
+
+    // ตรวจสอบชื่อพรรคซ้ำ
+    const existing = await partyRepo.findByName(data.name.trim());
+    if (existing) {
+      throw new Error(`พรรค "${data.name}" มีอยู่แล้ว`);
+    }
+
+    return await partyRepo.create({
+      name: data.name.trim(),
+      logoUrl: data.logoUrl,
+      policy: data.policy,
+    });
+  };
+
+  /**
+   * เพิ่มผู้สมัคร (EC only)
+   * Candidate inherits personal info (title, firstName, lastName, imageUrl) from User
+   */
+  public addCandidate = async (data: {
+    candidateNumber: number;
+    policy?: string | null;
+    partyId: number;
+    constituencyId: number;
+    userId: number;
+  }) => {
+    // Validation
+    if (
+      !data.candidateNumber ||
+      !data.partyId ||
+      !data.constituencyId ||
+      !data.userId
+    ) {
+      throw new Error(
+        "กรุณากระบุข้อมูลที่จำเป็น: candidateNumber, partyId, constituencyId, userId",
+      );
+    }
+
+    const user = await userRepo.findById(data.userId);
+    if (!user) {
+      throw new Error(`ไม่พบผู้ใช้ ID: ${data.userId}`);
+    }
+
+    if (user.constituencyId !== data.constituencyId) {
+      throw new Error(
+        `ผู้ใช้ไม่ได้อาศัยอยู่ในเขตเลือกตั้ง ID: ${data.constituencyId} ไม่สามารถลงสมัครในเขตนี้ได้`,
+      );
+    }
+
+    // ตรวจสอบว่า user นี้เป็นผู้สมัครอยู่แล้วหรือไม่
+    const existingCandidate = await candidateRepo.findByUserId(data.userId);
+    if (existingCandidate) {
+      throw new Error(`ผู้ใช้นี้เป็นผู้สมัครอยู่แล้ว`);
+    }
+
+    const party = await partyRepo.findById(data.partyId);
+    if (!party) {
+      throw new Error(`ไม่พบพรรค ID: ${data.partyId}`);
+    }
+
+    const constituency = await constituencyRepo.findById(data.constituencyId);
+    if (!constituency) {
+      throw new Error(`ไม่พบเขตเลือกตั้ง ID: ${data.constituencyId}`);
+    }
+
+    // ตรวจสอบหมายเลขผู้สมัครไม่ซ้ำในเขต
+    const isNumberUsed = await candidateRepo.isCandidateNumberUsed(
+      data.constituencyId,
+      data.candidateNumber,
+    );
+    if (isNumberUsed) {
+      throw new Error(
+        `หมายเลขผู้สมัคร ${data.candidateNumber} ถูกใช้ในเขตนี้แล้ว`,
+      );
+    }
+
+    return await candidateRepo.create({
+      candidateNumber: data.candidateNumber,
+      policy: data.policy || null,
+      user: { connect: { id: data.userId } },
+      party: { connect: { id: data.partyId } },
+      constituency: { connect: { id: data.constituencyId } },
+    });
+  };
+
+  /**
+   * ปิดการลงคะแนนในเขต (EC only)
+   */
+  public closePoll = async (constituencyId: number) => {
+    const constituency = await constituencyRepo.findById(constituencyId);
+
+    if (!constituency) {
+      throw new Error(`ไม่พบเขตเลือกตั้ง ID: ${constituencyId}`);
+    }
+
+    if (constituency.isClosed) {
+      throw new Error(`เขตเลือกตั้งนี้ปิดการลงคะแนนไปแล้ว`);
+    }
+
+    return await constituencyRepo.close(constituencyId);
+  };
+
+  /**
+   * ดึงรายการเขตเลือกตั้งทั้งหมด หรือกรองตามจังหวัด
+   */
+  public getConstituencies = async (filters?: { province?: string }) => {
+    let constituencies;
+
+    if (filters?.province) {
+      constituencies = await constituencyRepo.findByProvinceWithExtendedCounts(
+        filters.province,
+      );
+    } else {
+      constituencies = await constituencyRepo.findAllWithExtendedCounts();
+    }
+
+    // Transform data to include parties count in _count
+    return constituencies.map((constituency) => {
+      const { candidates, ...rest } = constituency;
+      return {
+        ...rest,
+        _count: {
+          ...rest._count,
+          eligibleVoters: rest._count.users,
+          parties: candidates.length, // จำนวนพรรค (distinct partyId)
+        },
+      };
+    });
+  };
+
+  /**
+   * ดูผลการเลือกตั้งในเขต
+   */
+  public getConstituencyResults = async (constituencyId: number) => {
+    const data = await constituencyRepo.findWithResults(constituencyId);
+
+    if (!data) {
+      throw new Error(`ไม่พบเขตเลือกตั้ง ID: ${constituencyId}`);
+    }
+
+    const candidatesWithVotes = data.candidates.map((candidate) => ({
+      id: candidate.id,
+      candidateNumber: candidate.candidateNumber,
+      title: candidate.user.title,
+      firstName: candidate.user.firstName,
+      lastName: candidate.user.lastName,
+      imageUrl: candidate.user.imageUrl,
+      policy: candidate.policy,
+      party: {
+        id: candidate.party.id,
+        name: candidate.party.name,
+        logoUrl: candidate.party.logoUrl,
+      },
+      voteCount: data.isClosed ? candidate.votes.length : null,
+    }));
+
+    return {
+      constituency: {
+        id: data.id,
+        province: data.province,
+        districtNumber: data.districtNumber,
+        isClosed: data.isClosed,
+      },
+      candidates: candidatesWithVotes,
+    };
+  };
+
+  /**
+   * ดูภาพรวมพรรคทั้งหมด พร้อมจำนวน MPs
+   */
+  public getPartyOverview = async () => {
+    const parties = await partyRepo.findAllWithCandidates();
+    const allConstituencies = await constituencyRepo.findAll();
+    const closedConstituencyIds = allConstituencies
+      .filter((c) => c.isClosed)
+      .map((c) => c.id);
+
+    // Get closed constituencies with full data
+    const closedConstituenciesData = await Promise.all(
+      closedConstituencyIds.map((id) => constituencyRepo.findWithResults(id)),
+    );
+
+    return parties.map((party) => {
+      let totalElectedMPs = 0;
+
+      for (const constituency of closedConstituenciesData) {
+        if (!constituency) continue;
+
+        let maxVotes = -1;
+        let winnerPartyId: number | null = null;
+
+        for (const candidate of constituency.candidates) {
+          const voteCount = candidate.votes.length;
+          if (voteCount > maxVotes) {
+            maxVotes = voteCount;
+            winnerPartyId = candidate.partyId;
+          }
+        }
+
+        if (winnerPartyId === party.id) {
+          totalElectedMPs++;
+        }
+      }
+
+      return {
+        id: party.id,
+        name: party.name,
+        logoUrl: party.logoUrl,
+        policy: party.policy,
+        totalElectedMPs,
+      };
+    });
+  };
+
+  // ==================== PUBLIC PARTY VIEW ====================
+
+  /**
+   * ดูรายการพรรคทั้งหมดแบบสาธารณะ พร้อมจำนวนผู้สมัครและ MPs ที่ได้รับเลือก (Public)
+   */
+  public getPublicPartyList = async () => {
+    const parties = await partyRepo.findAllWithCandidates();
+    const allConstituencies = await constituencyRepo.findAll();
+    const closedConstituencyIds = allConstituencies
+      .filter((c) => c.isClosed)
+      .map((c) => c.id);
+
+    // Get closed constituencies with full data
+    const closedConstituenciesData = await Promise.all(
+      closedConstituencyIds.map((id) => constituencyRepo.findWithResults(id)),
+    );
+
+    return parties.map((party) => {
+      let totalElectedMPs = 0;
+
+      for (const constituency of closedConstituenciesData) {
+        if (!constituency) continue;
+
+        let maxVotes = -1;
+        let winnerPartyId: number | null = null;
+
+        for (const candidate of constituency.candidates) {
+          const voteCount = candidate.votes.length;
+          if (voteCount > maxVotes) {
+            maxVotes = voteCount;
+            winnerPartyId = candidate.partyId;
+          }
+        }
+
+        if (winnerPartyId === party.id) {
+          totalElectedMPs++;
+        }
+      }
+
+      return {
+        id: party.id,
+        name: party.name,
+        logoUrl: party.logoUrl,
+        policy: party.policy,
+        totalCandidates: party.candidates.length,
+        totalElectedMPs,
+      };
+    });
+  };
+
+  /**
+   * ดูรายละเอียดพรรคพร้อมรายชื่อผู้สมัครทั้งหมด (Public)
+   */
+  public getPublicPartyDetails = async (partyId: number) => {
+    const party = await partyRepo.findByIdWithCandidates(partyId);
+
+    if (!party) {
+      throw new Error(`ไม่พบพรรค ID: ${partyId}`);
+    }
+
+    const allConstituencies = await constituencyRepo.findAll();
+    const closedConstituencyIds = allConstituencies
+      .filter((c) => c.isClosed)
+      .map((c) => c.id);
+
+    // Determine winners for closed constituencies
+    const winners = new Map<number, number>(); // constituencyId -> winnerId
+    const closedConstituenciesData = await Promise.all(
+      closedConstituencyIds.map((id) => constituencyRepo.findWithResults(id)),
+    );
+
+    for (const constituency of closedConstituenciesData) {
+      if (!constituency) continue;
+
+      let maxVotes = -1;
+      let winnerId: number | null = null;
+
+      for (const candidate of constituency.candidates) {
+        const voteCount = candidate.votes.length;
+        if (voteCount > maxVotes) {
+          maxVotes = voteCount;
+          winnerId = candidate.id;
+        }
+      }
+
+      if (winnerId !== null) {
+        winners.set(constituency.id, winnerId);
+      }
+    }
+
+    const candidates = party.candidates.map((candidate) => {
+      const isClosed = closedConstituencyIds.includes(candidate.constituencyId);
+      const isElected = winners.get(candidate.constituencyId) === candidate.id;
+
+      return {
+        id: candidate.id,
+        candidateNumber: candidate.candidateNumber,
+        title: candidate.user.title,
+        firstName: candidate.user.firstName,
+        lastName: candidate.user.lastName,
+        imageUrl: candidate.user.imageUrl,
+        policy: candidate.policy,
+        constituency: {
+          id: candidate.constituency.id,
+          province: candidate.constituency.province,
+          districtNumber: candidate.constituency.districtNumber,
+          isClosed: candidate.constituency.isClosed,
+        },
+        voteCount: isClosed ? candidate.votes.length : null,
+        isElected,
+      };
+    });
+
+    const totalElectedMPs = candidates.filter((c) => c.isElected).length;
+
+    return {
+      id: party.id,
+      name: party.name,
+      logoUrl: party.logoUrl,
+      policy: party.policy,
+      totalCandidates: candidates.length,
+      totalElectedMPs,
+      candidates,
+    };
+  };
+
+  /**
+   * ดึงรายการพรรคทั้งหมด (EC only)
+   */
+  public getAllParties = async () => {
+    return await partyRepo.findAllWithCandidateCount();
+  };
+
+  /**
+   * ดึงพรรคตาม ID (EC only)
+   */
+  public getPartyById = async (id: number) => {
+    const party = await partyRepo.findById(id);
+
+    if (!party) {
+      throw new Error(`ไม่พบพรรค ID: ${id}`);
+    }
+
+    return party;
+  };
+
+  /**
+   * อัปเดตพรรค (EC only)
+   */
+  public updateParty = async (
+    id: number,
+    data: { name?: string; logoUrl?: string; policy?: string },
+  ) => {
+    const party = await partyRepo.findById(id);
+
+    if (!party) {
+      throw new Error(`ไม่พบพรรค ID: ${id}`);
+    }
+
+    // ถ้ามีการเปลี่ยนชื่อพรรค ต้องตรวจสอบว่าไม่ซ้ำ
+    if (data.name && data.name !== party.name) {
+      const existing = await partyRepo.findByName(data.name);
+
+      if (existing) {
+        throw new Error(`พรรค "${data.name}" มีอยู่แล้ว`);
+      }
+    }
+
+    return await partyRepo.update(id, data);
+  };
+
+  /**
+   * ลบพรรค (EC only)
+   */
+  public deleteParty = async (id: number) => {
+    const party = await partyRepo.findById(id);
+
+    if (!party) {
+      throw new Error(`ไม่พบพรรค ID: ${id}`);
+    }
+
+    return await partyRepo.remove(id);
+  };
+
+  // ==================== EC CANDIDATE MANAGEMENT ====================
+
+  /**
+   * ดึงรายชื่อผู้มีสิทธิ์เลือกตั้ง พร้อมข้อมูลผู้สมัคร (EC only)
+   * @param filters - ต้องระบุ constituencyId หรือ province
+   */
+  public getEligibleVoters = async (filters: {
+    constituencyId?: number;
+    province?: string;
+  }) => {
+    if (!filters.constituencyId && !filters.province) {
+      throw new Error("กรุณาระบุ constituencyId หรือ province");
+    }
+
+    if (filters.constituencyId) {
+      return await this.getEligibleVotersByConstituency(filters.constituencyId);
+    }
+
+    return await this.getEligibleVotersByProvince(filters.province!);
+  };
+
+  /**
+   * ดึงรายชื่อผู้มีสิทธิ์เลือกตั้งในเขต พร้อมข้อมูลผู้สมัคร (EC only)
+   */
+  public getEligibleVotersByConstituency = async (constituencyId: number) => {
+    const constituency = await constituencyRepo.findById(constituencyId);
+
+    if (!constituency) {
+      throw new Error(`ไม่พบเขตเลือกตั้ง ID: ${constituencyId}`);
+    }
+
+    const users =
+      await userRepo.findByConstituencyWithCandidateInfo(constituencyId);
+
+    return {
+      constituency: {
+        id: constituency.id,
+        province: constituency.province,
+        districtNumber: constituency.districtNumber,
+        isClosed: constituency.isClosed,
+      },
+      voters: users.map((user) => ({
+        id: user.id,
+        nationalId: user.nationalId,
+        title: user.title,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        imageUrl: user.imageUrl,
+        address: user.address,
+        role: user.role,
+        isCandidate: !!user.candidateProfile,
+        candidateInfo: user.candidateProfile
+          ? {
+              id: user.candidateProfile.id,
+              candidateNumber: user.candidateProfile.candidateNumber,
+              policy: user.candidateProfile.policy,
+              party: user.candidateProfile.party,
+            }
+          : null,
+      })),
+    };
+  };
+
+  /**
+   * ดึงรายชื่อผู้มีสิทธิ์เลือกตั้งตามจังหวัด พร้อมข้อมูลผู้สมัคร (EC only)
+   */
+  public getEligibleVotersByProvince = async (province: string) => {
+    const users = await userRepo.findByProvince(province);
+
+    return users.map((user) => ({
+      id: user.id,
+      nationalId: user.nationalId,
+      title: user.title,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      imageUrl: user.imageUrl,
+      address: user.address,
+      role: user.role,
+      constituency: user.constituency,
+      isCandidate: !!user.candidateProfile,
+      candidateInfo: user.candidateProfile
+        ? {
+            id: user.candidateProfile.id,
+            candidateNumber: user.candidateProfile.candidateNumber,
+            policy: user.candidateProfile.policy,
+            party: user.candidateProfile.party,
+          }
+        : null,
+    }));
+  };
+
+  /**
+   * ดึงรายการผู้สมัคร หรือกรองตามเขต (EC only)
+   */
+  public getCandidates = async (filters?: { constituencyId?: number }) => {
+    if (filters?.constituencyId) {
+      return await this.getCandidatesByConstituency(filters.constituencyId);
+    }
+    return await candidateRepo.findAllWithUserInfo();
+  };
+
+  /**
+   * ดึงรายการผู้สมัครทั้งหมดพร้อมข้อมูลผู้ใช้ (EC only)
+   */
+  public getAllCandidates = async () => {
+    return await candidateRepo.findAllWithUserInfo();
+  };
+
+  /**
+   * ดึงรายการผู้สมัครในเขตพร้อมข้อมูลผู้ใช้ (EC only)
+   */
+  public getCandidatesByConstituency = async (constituencyId: number) => {
+    const constituency = await constituencyRepo.findById(constituencyId);
+
+    if (!constituency) {
+      throw new Error(`ไม่พบเขตเลือกตั้ง ID: ${constituencyId}`);
+    }
+
+    const candidates =
+      await candidateRepo.findByConstituencyWithFullDetails(constituencyId);
+
+    return {
+      constituency: {
+        id: constituency.id,
+        province: constituency.province,
+        districtNumber: constituency.districtNumber,
+        isClosed: constituency.isClosed,
+      },
+      candidates: candidates.map((candidate) => ({
+        id: candidate.id,
+        candidateNumber: candidate.candidateNumber,
+        title: candidate.user.title,
+        firstName: candidate.user.firstName,
+        lastName: candidate.user.lastName,
+        imageUrl: candidate.user.imageUrl,
+        policy: candidate.policy,
+        party: candidate.party,
+        user: {
+          id: candidate.user.id,
+          nationalId: candidate.user.nationalId,
+        },
+        voteCount: candidate.votes.length,
+      })),
+    };
+  };
+
+  /**
+   * ดึงข้อมูลผู้สมัครตาม ID (EC only)
+   */
+  public getCandidateById = async (candidateId: number) => {
+    const candidate = await candidateRepo.findById(candidateId);
+
+    if (!candidate) {
+      throw new Error(`ไม่พบผู้สมัคร ID: ${candidateId}`);
+    }
+
+    return candidate;
+  };
+
+  /**
+   * อัปเดตผู้สมัคร (EC only)
+   * Note: Personal info (title, firstName, lastName, imageUrl) is managed through User entity
+   */
+  public updateCandidate = async (
+    candidateId: number,
+    data: {
+      candidateNumber?: number;
+      policy?: string;
+      partyId?: number;
+    },
+  ) => {
+    const candidate = await candidateRepo.findById(candidateId);
+
+    if (!candidate) {
+      throw new Error(`ไม่พบผู้สมัคร ID: ${candidateId}`);
+    }
+
+    // ตรวจสอบว่าหมายเลขผู้สมัครไม่ซ้ำในเขต
+    if (
+      data.candidateNumber &&
+      data.candidateNumber !== candidate.candidateNumber
+    ) {
+      const isUsed = await candidateRepo.isCandidateNumberUsed(
+        candidate.constituencyId,
+        data.candidateNumber,
+        candidateId,
+      );
+
+      if (isUsed) {
+        throw new Error(
+          `หมายเลขผู้สมัคร ${data.candidateNumber} ถูกใช้ในเขตนี้แล้ว`,
+        );
+      }
+    }
+
+    // ตรวจสอบว่าพรรคมีอยู่จริง
+    if (data.partyId) {
+      const party = await partyRepo.findById(data.partyId);
+      if (!party) {
+        throw new Error(`ไม่พบพรรค ID: ${data.partyId}`);
+      }
+    }
+
+    return await candidateRepo.update(candidateId, data);
+  };
+
+  /**
+   * ลบผู้สมัคร (EC only)
+   */
+  public deleteCandidate = async (candidateId: number) => {
+    const candidate = await candidateRepo.findById(candidateId);
+
+    if (!candidate) {
+      throw new Error(`ไม่พบผู้สมัคร ID: ${candidateId}`);
+    }
+
+    return await candidateRepo.remove(candidateId);
+  };
+
+  /**
+   * ดึงหมายเลขผู้สมัครถัดไปในเขต (EC only)
+   */
+  public getNextCandidateNumber = async (constituencyId: number) => {
+    const constituency = await constituencyRepo.findById(constituencyId);
+
+    if (!constituency) {
+      throw new Error(`ไม่พบเขตเลือกตั้ง ID: ${constituencyId}`);
+    }
+
+    return await candidateRepo.getNextCandidateNumber(constituencyId);
+  };
+
+  /**
+   * ดึงรายการจังหวัดทั้งหมดที่มีเขตเลือกตั้ง (EC only)
+   */
+  public getAllProvinces = async () => {
+    const constituencies = await constituencyRepo.findAll();
+    const provinces = [...new Set(constituencies.map((c) => c.province))];
+    return provinces.sort();
+  };
+
+  // ==================== EC UPLOAD ====================
+
+  /**
+   * อัปโหลดโลโก้พรรค (EC only)
+   */
+  public uploadPartyLogo = async (
+    partyId: number,
+    file: Express.Multer.File,
+  ) => {
+    const party = await partyRepo.findById(partyId);
+
+    if (!party) {
+      throw new Error(`ไม่พบพรรค ID: ${partyId}`);
+    }
+
+    // Delete old logo if exists
+    if (party.logoUrl) {
+      await deleteFromSupabase(party.logoUrl);
+    }
+
+    // Upload new logo
+    const logoUrl = await uploadToSupabase(file, "parties");
+
+    // Update party with new logo URL
+    const updatedParty = await partyRepo.update(partyId, { logoUrl });
+
+    return {
+      id: updatedParty.id,
+      name: updatedParty.name,
+      logoUrl: updatedParty.logoUrl,
+    };
+  };
+}

@@ -1,9 +1,7 @@
 // src/services/upload.service.ts
-import { BUCKET_NAME, supabase, SUPABASE_PUBLIC_BASE_URL } from "../lib/s3";
+import { DeleteObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
+import { BUCKET_NAME, s3Client, SUPABASE_PUBLIC_BASE_URL } from "../lib/s3";
 
-/**
- * Generate unique filename with UUID
- */
 export const generateFileName = (
   folder: string,
   originalName: string,
@@ -13,43 +11,32 @@ export const generateFileName = (
   return `${folder}/${uuid}.${ext}`;
 };
 
-/**
- * Upload file to Supabase Storage
- */
 export const uploadToSupabase = async (
   file: Express.Multer.File,
   folder: string,
 ): Promise<string> => {
-  const filePath = generateFileName(folder, file.originalname);
+  const fileKey = generateFileName(folder, file.originalname);
 
   try {
-    const { data, error } = await supabase.storage
-      .from(BUCKET_NAME)
-      .upload(filePath, file.buffer, {
-        contentType: file.mimetype,
-        upsert: false,
-      });
-
-    if (error) {
-      throw new Error(error.message);
-    }
-
-    if (!data) {
-      throw new Error("Upload failed - no data returned");
-    }
-
-    // Return public URL
-    return `${SUPABASE_PUBLIC_BASE_URL}/${BUCKET_NAME}/${filePath}`;
-  } catch (error: any) {
-    throw new Error(
-      `อัปโหลดไฟล์ไม่สำเร็จ: ${error?.message || "Unknown error"}`,
+    await s3Client.send(
+      new PutObjectCommand({
+        Bucket: BUCKET_NAME,
+        Key: fileKey,
+        Body: file.buffer,
+        ContentType: file.mimetype,
+      }),
     );
+  } catch (error: any) {
+    throw new Error(`อัปโหลดไฟล์ไม่สำเร็จ: ${error?.message || "Unknown error"}`);
   }
+
+  if (!SUPABASE_PUBLIC_BASE_URL) {
+    throw new Error("ไม่พบ SUPABASE_PUBLIC_BASE_URL สำหรับสร้าง public URL");
+  }
+
+  return `${SUPABASE_PUBLIC_BASE_URL}/${BUCKET_NAME}/${fileKey}`;
 };
 
-/**
- * Delete file from Supabase Storage
- */
 export const deleteFromSupabase = async (imageUrl: string): Promise<void> => {
   try {
     // Extract file path from URL
@@ -58,13 +45,12 @@ export const deleteFromSupabase = async (imageUrl: string): Promise<void> => {
 
     const filePath = urlParts[1].split("?")[0];
 
-    const { error } = await supabase.storage
-      .from(BUCKET_NAME)
-      .remove([filePath]);
-
-    if (error) {
-      console.error("Failed to delete old image:", error);
-    }
+    await s3Client.send(
+      new DeleteObjectCommand({
+        Bucket: BUCKET_NAME,
+        Key: filePath,
+      }),
+    );
   } catch (error) {
     // Log but don't throw - deletion failure shouldn't break the flow
     console.error("Failed to delete old image:", error);

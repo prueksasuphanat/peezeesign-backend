@@ -2,15 +2,6 @@
 import { Response, NextFunction } from "express";
 import { AuthRequest } from "./auth.middleware";
 
-/**
- * Middleware สำหรับตรวจสอบสิทธิ์การเข้าถึงตาม Role
- * ใช้ร่วมกับ authenticate middleware
- *
- * @param roles - Array ของ roles ที่อนุญาตให้เข้าถึง (เช่น ['ADMIN', 'EC'])
- *
- * @example
- * router.post('/admin', authenticate, authorize('ADMIN'), controller.method);
- */
 export const authorize = (...roles: string[]) => {
   return (req: AuthRequest, res: Response, next: NextFunction) => {
     // ตรวจสอบว่ามีข้อมูล user จาก authenticate middleware หรือไม่

@@ -1,14 +1,15 @@
 // src/services/election.service.ts
-import * as userRepo from "../repositories/user.repository";
-import * as constituencyRepo from "../repositories/constituency.repository";
-import * as partyRepo from "../repositories/party.repository";
-import * as candidateRepo from "../repositories/candidate.repository";
+import * as userRepo from '../repositories/user.repository';
+import * as constituencyRepo from '../repositories/constituency.repository';
+import * as partyRepo from '../repositories/party.repository';
+import * as candidateRepo from '../repositories/candidate.repository';
 import { uploadToSupabase, deleteFromSupabase } from "./upload.service";
 
 export class ElectionService {
   /**
    * สร้างพรรคการเมืองใหม่ (EC only)
    */
+
   public createParty = async (data: {
     name: string;
     logoUrl?: string;
@@ -33,7 +34,6 @@ export class ElectionService {
 
   /**
    * เพิ่มผู้สมัคร (EC only)
-   * Candidate inherits personal info (title, firstName, lastName, imageUrl) from User
    */
   public addCandidate = async (data: {
     candidateNumber: number;
@@ -119,31 +119,23 @@ export class ElectionService {
   };
 
   /**
-   * ดึงรายการเขตเลือกตั้งทั้งหมด หรือกรองตามจังหวัด
+   * ดึงรายการเขตเลือกตั้งทั้งหมดตามจังหวัดถ้ามีนะ
    */
   public getConstituencies = async (filters?: { province?: string }) => {
-    let constituencies;
-
     if (filters?.province) {
-      constituencies = await constituencyRepo.findByProvinceWithExtendedCounts(
-        filters.province,
-      );
-    } else {
-      constituencies = await constituencyRepo.findAllWithExtendedCounts();
+      return await constituencyRepo.findByProvince(filters.province);
     }
+    return await constituencyRepo.findAll();
+  };
 
-    // Transform data to include parties count in _count
-    return constituencies.map((constituency) => {
-      const { candidates, ...rest } = constituency;
-      return {
-        ...rest,
-        _count: {
-          ...rest._count,
-          eligibleVoters: rest._count.users,
-          parties: candidates.length, // จำนวนพรรค (distinct partyId)
-        },
-      };
-    });
+  /**
+   * ดึงรายการเขตเลือกตั้งตามจังหวัด
+   */
+  public getConstituenciesByProvince = async (province: string) => {
+    if (!province) {
+      throw new Error('กรุณาระบุชื่อจังหวัด');
+    }
+    return await constituencyRepo.findByProvince(province);
   };
 
   /**
@@ -230,11 +222,6 @@ export class ElectionService {
     });
   };
 
-  // ==================== PUBLIC PARTY VIEW ====================
-
-  /**
-   * ดูรายการพรรคทั้งหมดแบบสาธารณะ พร้อมจำนวนผู้สมัครและ MPs ที่ได้รับเลือก (Public)
-   */
   public getPublicPartyList = async () => {
     const parties = await partyRepo.findAllWithCandidates();
     const allConstituencies = await constituencyRepo.findAll();
@@ -280,9 +267,6 @@ export class ElectionService {
     });
   };
 
-  /**
-   * ดูรายละเอียดพรรคพร้อมรายชื่อผู้สมัครทั้งหมด (Public)
-   */
   public getPublicPartyDetails = async (partyId: number) => {
     const party = await partyRepo.findByIdWithCandidates(partyId);
 
@@ -356,16 +340,10 @@ export class ElectionService {
     };
   };
 
-  /**
-   * ดึงรายการพรรคทั้งหมด (EC only)
-   */
   public getAllParties = async () => {
     return await partyRepo.findAllWithCandidateCount();
   };
 
-  /**
-   * ดึงพรรคตาม ID (EC only)
-   */
   public getPartyById = async (id: number) => {
     const party = await partyRepo.findById(id);
 
@@ -376,9 +354,6 @@ export class ElectionService {
     return party;
   };
 
-  /**
-   * อัปเดตพรรค (EC only)
-   */
   public updateParty = async (
     id: number,
     data: { name?: string; logoUrl?: string; policy?: string },
@@ -401,9 +376,6 @@ export class ElectionService {
     return await partyRepo.update(id, data);
   };
 
-  /**
-   * ลบพรรค (EC only)
-   */
   public deleteParty = async (id: number) => {
     const party = await partyRepo.findById(id);
 
@@ -414,12 +386,6 @@ export class ElectionService {
     return await partyRepo.remove(id);
   };
 
-  // ==================== EC CANDIDATE MANAGEMENT ====================
-
-  /**
-   * ดึงรายชื่อผู้มีสิทธิ์เลือกตั้ง พร้อมข้อมูลผู้สมัคร (EC only)
-   * @param filters - ต้องระบุ constituencyId หรือ province
-   */
   public getEligibleVoters = async (filters: {
     constituencyId?: number;
     province?: string;
@@ -435,9 +401,6 @@ export class ElectionService {
     return await this.getEligibleVotersByProvince(filters.province!);
   };
 
-  /**
-   * ดึงรายชื่อผู้มีสิทธิ์เลือกตั้งในเขต พร้อมข้อมูลผู้สมัคร (EC only)
-   */
   public getEligibleVotersByConstituency = async (constituencyId: number) => {
     const constituency = await constituencyRepo.findById(constituencyId);
 
@@ -467,19 +430,16 @@ export class ElectionService {
         isCandidate: !!user.candidateProfile,
         candidateInfo: user.candidateProfile
           ? {
-              id: user.candidateProfile.id,
-              candidateNumber: user.candidateProfile.candidateNumber,
-              policy: user.candidateProfile.policy,
-              party: user.candidateProfile.party,
-            }
+            id: user.candidateProfile.id,
+            candidateNumber: user.candidateProfile.candidateNumber,
+            policy: user.candidateProfile.policy,
+            party: user.candidateProfile.party,
+          }
           : null,
       })),
     };
   };
 
-  /**
-   * ดึงรายชื่อผู้มีสิทธิ์เลือกตั้งตามจังหวัด พร้อมข้อมูลผู้สมัคร (EC only)
-   */
   public getEligibleVotersByProvince = async (province: string) => {
     const users = await userRepo.findByProvince(province);
 
@@ -496,18 +456,15 @@ export class ElectionService {
       isCandidate: !!user.candidateProfile,
       candidateInfo: user.candidateProfile
         ? {
-            id: user.candidateProfile.id,
-            candidateNumber: user.candidateProfile.candidateNumber,
-            policy: user.candidateProfile.policy,
-            party: user.candidateProfile.party,
-          }
+          id: user.candidateProfile.id,
+          candidateNumber: user.candidateProfile.candidateNumber,
+          policy: user.candidateProfile.policy,
+          party: user.candidateProfile.party,
+        }
         : null,
     }));
   };
 
-  /**
-   * ดึงรายการผู้สมัคร หรือกรองตามเขต (EC only)
-   */
   public getCandidates = async (filters?: { constituencyId?: number }) => {
     if (filters?.constituencyId) {
       return await this.getCandidatesByConstituency(filters.constituencyId);
@@ -515,16 +472,10 @@ export class ElectionService {
     return await candidateRepo.findAllWithUserInfo();
   };
 
-  /**
-   * ดึงรายการผู้สมัครทั้งหมดพร้อมข้อมูลผู้ใช้ (EC only)
-   */
   public getAllCandidates = async () => {
     return await candidateRepo.findAllWithUserInfo();
   };
 
-  /**
-   * ดึงรายการผู้สมัครในเขตพร้อมข้อมูลผู้ใช้ (EC only)
-   */
   public getCandidatesByConstituency = async (constituencyId: number) => {
     const constituency = await constituencyRepo.findById(constituencyId);
 
@@ -560,9 +511,6 @@ export class ElectionService {
     };
   };
 
-  /**
-   * ดึงข้อมูลผู้สมัครตาม ID (EC only)
-   */
   public getCandidateById = async (candidateId: number) => {
     const candidate = await candidateRepo.findById(candidateId);
 
@@ -573,14 +521,14 @@ export class ElectionService {
     return candidate;
   };
 
-  /**
-   * อัปเดตผู้สมัคร (EC only)
-   * Note: Personal info (title, firstName, lastName, imageUrl) is managed through User entity
-   */
   public updateCandidate = async (
     candidateId: number,
     data: {
       candidateNumber?: number;
+      title?: string;
+      firstName?: string;
+      lastName?: string;
+      imageUrl?: string;
       policy?: string;
       partyId?: number;
     },
@@ -592,10 +540,7 @@ export class ElectionService {
     }
 
     // ตรวจสอบว่าหมายเลขผู้สมัครไม่ซ้ำในเขต
-    if (
-      data.candidateNumber &&
-      data.candidateNumber !== candidate.candidateNumber
-    ) {
+    if (data.candidateNumber && data.candidateNumber !== candidate.candidateNumber) {
       const isUsed = await candidateRepo.isCandidateNumberUsed(
         candidate.constituencyId,
         data.candidateNumber,
@@ -620,9 +565,6 @@ export class ElectionService {
     return await candidateRepo.update(candidateId, data);
   };
 
-  /**
-   * ลบผู้สมัคร (EC only)
-   */
   public deleteCandidate = async (candidateId: number) => {
     const candidate = await candidateRepo.findById(candidateId);
 
@@ -633,9 +575,6 @@ export class ElectionService {
     return await candidateRepo.remove(candidateId);
   };
 
-  /**
-   * ดึงหมายเลขผู้สมัครถัดไปในเขต (EC only)
-   */
   public getNextCandidateNumber = async (constituencyId: number) => {
     const constituency = await constituencyRepo.findById(constituencyId);
 
@@ -646,24 +585,13 @@ export class ElectionService {
     return await candidateRepo.getNextCandidateNumber(constituencyId);
   };
 
-  /**
-   * ดึงรายการจังหวัดทั้งหมดที่มีเขตเลือกตั้ง (EC only)
-   */
   public getAllProvinces = async () => {
     const constituencies = await constituencyRepo.findAll();
     const provinces = [...new Set(constituencies.map((c) => c.province))];
     return provinces.sort();
   };
 
-  // ==================== EC UPLOAD ====================
-
-  /**
-   * อัปโหลดโลโก้พรรค (EC only)
-   */
-  public uploadPartyLogo = async (
-    partyId: number,
-    file: Express.Multer.File,
-  ) => {
+  public uploadPartyLogo = async (partyId: number, file: Express.Multer.File) => {
     const party = await partyRepo.findById(partyId);
 
     if (!party) {

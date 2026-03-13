@@ -1,27 +1,40 @@
 import dotenv from "dotenv";
-import { createClient } from "@supabase/supabase-js";
+import { S3Client } from "@aws-sdk/client-s3";
 
 dotenv.config();
 
 export const BUCKET_NAME = process.env.SUPABASE_BUCKET_NAME || "image";
 
-const supabaseUrl = process.env.SUPABASE_URL || "";
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+const accessKeyId = process.env.SUPABASE_ANON_KEY || "";
+const secretAccessKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
 
-if (!supabaseUrl || !supabaseServiceKey) {
+const s3Endpoint =
+  process.env.SUPABASE_S3_ENDPOINT || process.env.SUPABASE_URL || "";
+
+const derivePublicBaseUrl = (endpoint: string): string => {
+  try {
+    const parsed = new URL(endpoint);
+    return `${parsed.origin}/storage/v1/object/public`;
+  } catch {
+    return "";
+  }
+};
+
+export const SUPABASE_PUBLIC_BASE_URL =
+  process.env.SUPABASE_PUBLIC_BASE_URL || derivePublicBaseUrl(s3Endpoint);
+
+if (!s3Endpoint || !accessKeyId || !secretAccessKey) {
   console.warn(
-    "Warning: SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY is not set. File uploads may not work.",
+    "Warning: SUPABASE_S3_ENDPOINT/SUPABASE_URL, SUPABASE_ANON_KEY, or SUPABASE_SERVICE_ROLE_KEY is not set. File uploads may not work.",
   );
 }
 
-// Create Supabase client with service role key for admin operations
-export const supabase = createClient(supabaseUrl, supabaseServiceKey, {
-  auth: {
-    autoRefreshToken: false,
-    persistSession: false,
+export const s3Client = new S3Client({
+  endpoint: s3Endpoint,
+  region: "ap-southeast-1",
+  forcePathStyle: true,
+  credentials: {
+    accessKeyId,
+    secretAccessKey,
   },
 });
-
-export const SUPABASE_PUBLIC_BASE_URL =
-  process.env.SUPABASE_PUBLIC_BASE_URL ||
-  `${supabaseUrl}/storage/v1/object/public`;

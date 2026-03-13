@@ -1,4 +1,3 @@
-// src/repositories/party.repository.ts
 import { Prisma } from "../generated/prisma";
 import { prisma } from "../lib/prisma";
 
@@ -45,9 +44,6 @@ export const findAllWithCandidates = async () => {
   });
 };
 
-/**
- * Update a party
- */
 export const update = async (
   id: number,
   data: { name?: string; logoUrl?: string; policy?: string },
@@ -58,27 +54,18 @@ export const update = async (
   });
 };
 
-/**
- * Delete a party
- */
 export const remove = async (id: number) => {
   return await prisma.party.delete({
     where: { id },
   });
 };
 
-/**
- * Find party by name
- */
 export const findByName = async (name: string) => {
   return await prisma.party.findFirst({
     where: { name },
   });
 };
 
-/**
- * Get all parties with candidate count
- */
 export const findAllWithCandidateCount = async () => {
   return await prisma.party.findMany({
     orderBy: { name: "asc" },
@@ -90,10 +77,6 @@ export const findAllWithCandidateCount = async () => {
   });
 };
 
-/**
- * Find party by ID with all candidates (for public viewing)
- * Includes user data since candidate inherits personal info from user
- */
 export const findByIdWithCandidates = async (id: number) => {
   return await prisma.party.findUnique({
     where: { id },

@@ -5,9 +5,6 @@ import * as constituencyRepo from "../repositories/constituency.repository";
 import { uploadToSupabase, deleteFromSupabase } from "./upload.service";
 
 export class AuthService {
-  /**
-   * ลงทะเบียนผู้ใช้ใหม่
-   */
   public registerUser = async (
     nationalId: string,
     laserCode: string,
@@ -50,9 +47,6 @@ export class AuthService {
     return user;
   };
 
-  /**
-   * เข้าสู่ระบบด้วยเลขบัตรประชาชนและ Laser Code
-   */
   public loginUser = async (nationalId: string, laserCode: string) => {
     const user = await userRepo.findByNationalId(nationalId);
 
@@ -68,9 +62,6 @@ export class AuthService {
     return user;
   };
 
-  /**
-   * ดึงข้อมูลโปรไฟล์ผู้ใช้
-   */
   public getUserProfile = async (userId: number) => {
     const user = await userRepo.findById(userId);
 
@@ -81,9 +72,6 @@ export class AuthService {
     return user;
   };
 
-  /**
-   * อัปโหลดรูปโปรไฟล์ผู้ใช้
-   */
   public uploadProfileImage = async (
     userId: number,
     file: Express.Multer.File,
@@ -111,5 +99,25 @@ export class AuthService {
       lastName: updatedUser.lastName,
       imageUrl: updatedUser.imageUrl,
     };
+  };
+
+  public updateProfile = async (
+    userId: number,
+    data: {
+      title?: string;
+      firstName?: string;
+      lastName?: string;
+      address?: string;
+    },
+  ) => {
+    const user = await userRepo.findById(userId);
+
+    if (!user) {
+      throw new Error(`ไม่พบผู้ใช้ ID: ${userId}`);
+    }
+
+    const updatedUser = await userRepo.update(userId, data);
+
+    return updatedUser;
   };
 }

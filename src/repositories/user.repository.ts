@@ -2,9 +2,7 @@
 import { Prisma } from "../generated/prisma";
 import { prisma } from "../lib/prisma";
 
-/**
- * Create a new user
- */
+
 export const create = async (data: Prisma.UserCreateInput) => {
   return await prisma.user.create({
     data,
@@ -12,9 +10,6 @@ export const create = async (data: Prisma.UserCreateInput) => {
   });
 };
 
-/**
- * Find user by ID
- */
 export const findById = async (id: number) => {
   return await prisma.user.findUnique({
     where: { id },
@@ -22,9 +17,6 @@ export const findById = async (id: number) => {
   });
 };
 
-/**
- * Find user by National ID
- */
 export const findByNationalId = async (nationalId: string) => {
   return await prisma.user.findUnique({
     where: { nationalId },
@@ -32,9 +24,6 @@ export const findByNationalId = async (nationalId: string) => {
   });
 };
 
-/**
- * Update user role
- */
 export const updateRole = async (
   id: number,
   role: Prisma.EnumRoleFieldUpdateOperationsInput | any,
@@ -46,9 +35,6 @@ export const updateRole = async (
   });
 };
 
-/**
- * Get all users (for admin)
- */
 export const findAll = async () => {
   return await prisma.user.findMany({
     include: { constituency: true },
@@ -56,9 +42,6 @@ export const findAll = async () => {
   });
 };
 
-/**
- * Get all users with full details including candidate profile and vote status (Admin)
- */
 export const findAllWithFullDetails = async () => {
   return await prisma.user.findMany({
     include: {
@@ -74,9 +57,6 @@ export const findAllWithFullDetails = async () => {
   });
 };
 
-/**
- * Get users by constituency with candidate info (for EC candidate management)
- */
 export const findByConstituencyWithCandidateInfo = async (
   constituencyId: number,
 ) => {
@@ -94,9 +74,6 @@ export const findByConstituencyWithCandidateInfo = async (
   });
 };
 
-/**
- * Get users by province (filter by province name)
- */
 export const findByProvince = async (province: string) => {
   return await prisma.user.findMany({
     where: {
@@ -116,9 +93,6 @@ export const findByProvince = async (province: string) => {
   });
 };
 
-/**
- * Get users filtered by role
- */
 export const findByRole = async (role: "VOTER" | "EC" | "ADMIN") => {
   return await prisma.user.findMany({
     where: { role },
@@ -134,9 +108,6 @@ export const findByRole = async (role: "VOTER" | "EC" | "ADMIN") => {
   });
 };
 
-/**
- * Update user details
- */
 export const update = async (
   id: number,
   data: {
@@ -145,6 +116,7 @@ export const update = async (
     address?: string;
     imageUrl?: string;
     constituencyId?: number;
+    title?: string;
   },
 ) => {
   return await prisma.user.update({

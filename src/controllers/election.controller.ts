@@ -1,13 +1,10 @@
-// src/controllers/election.controller.ts
-import { Request, Response } from "express";
-import { ElectionService } from "../services/election.service";
+import { Request, Response } from 'express';
+import { ElectionService } from '../services/election.service';
 
 export class ElectionController {
   constructor(
     private electionService: ElectionService = new ElectionService(),
-  ) {}
-
-  // ==================== EC FEATURES ====================
+  ) { }
 
   /**
    * POST /api/election/party
@@ -39,8 +36,8 @@ export class ElectionController {
   /**
    * POST /api/election/candidate
    * เพิ่มผู้สมัคร (EC only)
-   * Note: Personal info (title, firstName, lastName, imageUrl) is inherited from User entity
    */
+
   addCandidate = async (req: Request, res: Response) => {
     try {
       const {
@@ -73,9 +70,10 @@ export class ElectionController {
   };
 
   /**
-   * PATCH /api/election/close/:id
-   * ปิดการลงคะแนนในเขต (EC only)
-   */
+ * PATCH /api/election/close/:id
+ * ปิดการลงคะแนนในเขต (EC only)
+ */
+
   closePoll = async (req: Request, res: Response) => {
     try {
       const constituencyId = parseInt(req.params.id as string);
@@ -83,7 +81,7 @@ export class ElectionController {
       if (isNaN(constituencyId)) {
         return res.status(400).json({
           success: false,
-          message: "Constituency ID ไม่ถูกต้อง",
+          message: 'Constituency ID ไม่ถูกต้อง',
         });
       }
 
@@ -91,7 +89,7 @@ export class ElectionController {
 
       res.status(200).json({
         success: true,
-        message: "ปิดการลงคะแนนสำเร็จ",
+        message: 'ปิดการลงคะแนนสำเร็จ',
         data: constituency,
       });
     } catch (error: any) {
@@ -101,8 +99,6 @@ export class ElectionController {
       });
     }
   };
-
-  // ==================== PUBLIC RESULTS ====================
 
   /**
    * GET /api/election/constituency/:id
@@ -115,7 +111,7 @@ export class ElectionController {
       if (isNaN(constituencyId)) {
         return res.status(400).json({
           success: false,
-          message: "Constituency ID ไม่ถูกต้อง",
+          message: 'Constituency ID ไม่ถูกต้อง',
         });
       }
 
@@ -178,10 +174,6 @@ export class ElectionController {
     }
   };
 
-  /**
-   * GET /api/election/public/parties
-   * ดูรายการพรรคทั้งหมดแบบสาธารณะ (Public)
-   */
   getPublicPartyList = async (req: Request, res: Response) => {
     try {
       const parties = await this.electionService.getPublicPartyList();
@@ -198,10 +190,6 @@ export class ElectionController {
     }
   };
 
-  /**
-   * GET /api/election/public/party/:id
-   * ดูรายละเอียดพรรคพร้อมรายชื่อผู้สมัคร (Public)
-   */
   getPublicPartyDetails = async (req: Request, res: Response) => {
     try {
       const idParam = req.params.id;
@@ -228,12 +216,6 @@ export class ElectionController {
     }
   };
 
-  // ==================== EC PARTY MANAGEMENT ====================
-
-  /**
-   * GET /api/election/parties
-   * ดูรายการพรรคทั้งหมด (EC only)
-   */
   getAllParties = async (req: Request, res: Response) => {
     try {
       const parties = await this.electionService.getAllParties();
@@ -250,10 +232,6 @@ export class ElectionController {
     }
   };
 
-  /**
-   * GET /api/election/party/:id
-   * ดูพรรคตาม ID (EC only)
-   */
   getPartyById = async (req: Request, res: Response) => {
     try {
       const idParam = req.params.id;
@@ -280,10 +258,6 @@ export class ElectionController {
     }
   };
 
-  /**
-   * PUT /api/election/party/:id
-   * อัปเดตพรรค (EC only)
-   */
   updateParty = async (req: Request, res: Response) => {
     try {
       const idParam = req.params.id;
@@ -316,10 +290,6 @@ export class ElectionController {
     }
   };
 
-  /**
-   * DELETE /api/election/party/:id
-   * ลบพรรค (EC only)
-   */
   deleteParty = async (req: Request, res: Response) => {
     try {
       const idParam = req.params.id;
@@ -346,12 +316,6 @@ export class ElectionController {
     }
   };
 
-  // ==================== EC CANDIDATE MANAGEMENT ====================
-
-  /**
-   * GET /api/election/voters
-   * ดูรายชื่อผู้มีสิทธิ์เลือกตั้งพร้อมข้อมูลผู้สมัคร (EC only)
-   */
   getEligibleVoters = async (req: Request, res: Response) => {
     try {
       const { constituencyId, province } = req.query;
@@ -376,10 +340,6 @@ export class ElectionController {
     }
   };
 
-  /**
-   * GET /api/election/candidates
-   * ดูรายการผู้สมัครทั้งหมดหรือตามเขต (EC only)
-   */
   getCandidates = async (req: Request, res: Response) => {
     try {
       const { constituencyId } = req.query;
@@ -403,10 +363,6 @@ export class ElectionController {
     }
   };
 
-  /**
-   * GET /api/election/candidate/:id
-   * ดูข้อมูลผู้สมัครตาม ID (EC only)
-   */
   getCandidateById = async (req: Request, res: Response) => {
     try {
       const idParam = req.params.id;
@@ -433,16 +389,12 @@ export class ElectionController {
     }
   };
 
-  /**
-   * PUT /api/election/candidate/:id
-   * อัปเดตผู้สมัคร (EC only)
-   * Note: Personal info (title, firstName, lastName, imageUrl) is managed through User entity
-   */
   updateCandidate = async (req: Request, res: Response) => {
     try {
       const idParam = req.params.id;
       const id = parseInt(Array.isArray(idParam) ? idParam[0] : idParam);
-      const { candidateNumber, policy, partyId } = req.body;
+      const { candidateNumber, title, firstName, lastName, imageUrl, policy, partyId } =
+        req.body;
 
       if (isNaN(id)) {
         return res.status(400).json({
@@ -453,6 +405,10 @@ export class ElectionController {
 
       const candidate = await this.electionService.updateCandidate(id, {
         candidateNumber,
+        title,
+        firstName,
+        lastName,
+        imageUrl,
         policy,
         partyId,
       });
@@ -470,10 +426,6 @@ export class ElectionController {
     }
   };
 
-  /**
-   * DELETE /api/election/candidate/:id
-   * ลบผู้สมัคร (EC only)
-   */
   deleteCandidate = async (req: Request, res: Response) => {
     try {
       const idParam = req.params.id;
@@ -500,10 +452,6 @@ export class ElectionController {
     }
   };
 
-  /**
-   * GET /api/election/next-candidate-number/:constituencyId
-   * ดูหมายเลขผู้สมัครถัดไปในเขต (EC only)
-   */
   getNextCandidateNumber = async (req: Request, res: Response) => {
     try {
       const idParam = req.params.constituencyId;
@@ -533,10 +481,6 @@ export class ElectionController {
     }
   };
 
-  /**
-   * GET /api/election/provinces
-   * ดูรายการจังหวัดทั้งหมดที่มีเขตเลือกตั้ง (EC only)
-   */
   getAllProvinces = async (req: Request, res: Response) => {
     try {
       const provinces = await this.electionService.getAllProvinces();
@@ -553,12 +497,7 @@ export class ElectionController {
     }
   };
 
-  // ==================== EC UPLOAD ====================
 
-  /**
-   * POST /api/election/party/:id/logo
-   * อัปโหลดโลโก้พรรค (EC only)
-   */
   uploadPartyLogo = async (req: Request, res: Response) => {
     try {
       const idParam = req.params.id;

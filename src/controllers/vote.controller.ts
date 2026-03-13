@@ -1,15 +1,10 @@
-// src/controllers/vote.controller.ts
 import { Response } from "express";
-import { VoteService } from "../services/vote.service";
 import { AuthRequest } from "../middlewares/auth.middleware";
+import { VoteService } from "../services/vote.service";
 
 export class VoteController {
-  constructor(private voteService: VoteService = new VoteService()) {}
+  constructor(private voteService: VoteService = new VoteService()) { }
 
-  /**
-   * GET /api/votes/ballot
-   * ดูบัตรเลือกตั้ง (Get Ballot) - userId from token
-   */
   getBallot = async (req: AuthRequest, res: Response) => {
     try {
       const userId = req.user?.id;
@@ -35,10 +30,6 @@ export class VoteController {
     }
   };
 
-  /**
-   * POST /api/votes
-   * ลงคะแนนเสียง (Cast Vote) - userId from token
-   */
   vote = async (req: AuthRequest, res: Response) => {
     try {
       const userId = req.user?.id;
@@ -73,10 +64,6 @@ export class VoteController {
     }
   };
 
-  /**
-   * GET /api/votes/my-vote
-   * ดูคะแนนเสียงของตัวเอง (Get My Vote) - userId from token
-   */
   getMyVote = async (req: AuthRequest, res: Response) => {
     try {
       const userId = req.user?.id;
@@ -102,10 +89,6 @@ export class VoteController {
     }
   };
 
-  /**
-   * GET /api/votes/my-results
-   * ดูผลการเลือกตั้งในเขตของตัวเอง (Get My Constituency Results) - userId from token
-   */
   getMyConstituencyResults = async (req: AuthRequest, res: Response) => {
     try {
       const userId = req.user?.id;
@@ -118,6 +101,57 @@ export class VoteController {
       }
 
       const result = await this.voteService.getMyConstituencyResults(userId);
+
+      res.status(200).json({
+        success: true,
+        data: result,
+      });
+    } catch (error: any) {
+      res.status(400).json({
+        success: false,
+        message: error.message,
+      });
+    }
+  };
+
+  getAllConstituencies = async (req: AuthRequest, res: Response) => {
+    try {
+      const { province } = req.query;
+
+      const result = await this.voteService.getConstituenciesList(
+        typeof province === "string" ? province : undefined,
+      );
+
+      res.status(200).json({
+        success: true,
+        data: result,
+      });
+    } catch (error: any) {
+      res.status(400).json({
+        success: false,
+        message: error.message,
+      });
+    }
+  };
+
+  getResultsByConstituency = async (req: AuthRequest, res: Response) => {
+    try {
+      const userId = req.user?.id;
+
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          message: "กรุณาล็อกอินเข้าสู่ระบบ",
+        });
+      }
+
+      const { province, districtNumber } = req.query;
+
+      const result = await this.voteService.getResultsByFilter(
+        userId,
+        typeof province === "string" ? province : undefined,
+        districtNumber ? parseInt(districtNumber as string) : undefined,
+      );
 
       res.status(200).json({
         success: true,

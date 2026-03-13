@@ -8,8 +8,6 @@ const adapter = new PrismaPg({ connectionString });
 const prisma = new PrismaClient({ adapter });
 
 async function main() {
-  console.log("🌱 Starting database seeding...");
-
   // Create Admin user
   const admin = await prisma.user.upsert({
     where: { nationalId: "0000000000000" },
@@ -40,7 +38,7 @@ async function main() {
 
 main()
   .catch((e) => {
-    console.error("❌ Error during seeding:", e);
+    console.error("Error during seeding: ", e);
     process.exit(1);
   })
   .finally(async () => {

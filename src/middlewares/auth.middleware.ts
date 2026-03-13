@@ -10,17 +10,13 @@ export interface AuthRequest extends Request {
   };
 }
 
-/**
- * Middleware สำหรับตรวจสอบว่าผู้ใช้ล็อกอินหรือยัง
- * ตรวจสอบ JWT Token จาก Authorization header
- */
+// auth for middleware
 export const authenticate = async (
   req: AuthRequest,
   res: Response,
   next: NextFunction,
 ) => {
   try {
-    // ดึง token จาก header
     const authHeader = req.headers.authorization;
 
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -39,19 +35,16 @@ export const authenticate = async (
       });
     }
 
-    // ตรวจสอบ JWT Secret
     if (!process.env.JWT_SECRET) {
       throw new Error("JWT_SECRET is not defined in environment variables");
     }
 
-    // Verify token
     const decoded = jwt.verify(token, process.env.JWT_SECRET) as {
       id: number;
       nationalId: string;
       role: string;
     };
 
-    // เพิ่มข้อมูล user เข้าไปใน request object
     req.user = decoded;
 
     next();

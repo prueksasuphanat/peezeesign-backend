@@ -1,10 +1,6 @@
-// src/repositories/candidate.repository.ts
 import { Prisma } from "../generated/prisma";
 import { prisma } from "../lib/prisma";
 
-/**
- * Create a new candidate
- */
 export const create = async (data: Prisma.CandidateCreateInput) => {
   return await prisma.candidate.create({
     data,
@@ -16,9 +12,6 @@ export const create = async (data: Prisma.CandidateCreateInput) => {
   });
 };
 
-/**
- * Find candidate by ID
- */
 export const findById = async (id: number) => {
   return await prisma.candidate.findUnique({
     where: { id },
@@ -29,10 +22,24 @@ export const findById = async (id: number) => {
   });
 };
 
-/**
- * Find all candidates in a constituency
- * Includes user data since candidate inherits personal info from user
- */
+export const findWithResults = async (id: number) => {
+  return await prisma.constituency.findUnique({
+    where: { id },
+    include: {
+      candidates: {
+        include: {
+          user: true,
+          party: true,
+          votes: true,
+        },
+        orderBy: {
+          candidateNumber: "asc",
+        },
+      },
+    },
+  });
+};
+
 export const findByConstituency = async (constituencyId: number) => {
   return await prisma.candidate.findMany({
     where: { constituencyId },
@@ -47,9 +54,6 @@ export const findByConstituency = async (constituencyId: number) => {
   });
 };
 
-/**
- * Find all candidates with full user info
- */
 export const findAllWithUserInfo = async () => {
   return await prisma.candidate.findMany({
     include: {
@@ -66,9 +70,6 @@ export const findAllWithUserInfo = async () => {
   });
 };
 
-/**
- * Find candidates by constituency with full details
- */
 export const findByConstituencyWithFullDetails = async (
   constituencyId: number,
 ) => {
@@ -84,9 +85,6 @@ export const findByConstituencyWithFullDetails = async (
   });
 };
 
-/**
- * Find candidate by user ID
- */
 export const findByUserId = async (userId: number) => {
   return await prisma.candidate.findUnique({
     where: { userId },
@@ -97,14 +95,15 @@ export const findByUserId = async (userId: number) => {
   });
 };
 
-/**
- * Update candidate
- * Note: Personal info (title, firstName, lastName, imageUrl) is managed through User entity
- */
+
 export const update = async (
   id: number,
   data: {
     candidateNumber?: number;
+    title?: string;
+    firstName?: string;
+    lastName?: string;
+    imageUrl?: string;
     policy?: string;
     partyId?: number;
   },
@@ -120,18 +119,12 @@ export const update = async (
   });
 };
 
-/**
- * Delete candidate
- */
 export const remove = async (id: number) => {
   return await prisma.candidate.delete({
     where: { id },
   });
 };
 
-/**
- * Get next available candidate number in constituency
- */
 export const getNextCandidateNumber = async (constituencyId: number) => {
   const lastCandidate = await prisma.candidate.findFirst({
     where: { constituencyId },
@@ -141,9 +134,6 @@ export const getNextCandidateNumber = async (constituencyId: number) => {
   return lastCandidate ? lastCandidate.candidateNumber + 1 : 1;
 };
 
-/**
- * Check if candidate number is already used in constituency
- */
 export const isCandidateNumberUsed = async (
   constituencyId: number,
   candidateNumber: number,

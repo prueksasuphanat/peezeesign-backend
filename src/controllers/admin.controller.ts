@@ -3,13 +3,12 @@ import { Request, Response } from "express";
 import { AdminService } from "../services/admin.service";
 
 export class AdminController {
-  constructor(private adminService: AdminService = new AdminService()) {}
+  constructor(private adminService: AdminService = new AdminService()) { }
 
-  /**
-   * GET /api/admin/users
-   * Get all users (Admin only)
-   */
+
+
   getAllUsers = async (req: Request, res: Response) => {
+
     try {
       const { role, province } = req.query;
 
@@ -30,10 +29,58 @@ export class AdminController {
     }
   };
 
-  /**
-   * GET /api/admin/user/:id
-   * Get user by ID (Admin only)
-   */
+
+  createConstituency = async (req: Request, res: Response) => {
+    try {
+      const { province, districtNumber } = req.body;
+
+      const constituency = await this.adminService.createConstituency({
+        province,
+        districtNumber,
+      });
+
+      res.status(201).json({
+        success: true,
+        message: "สร้างเขตเลือกตั้งสำเร็จ",
+        data: constituency,
+      });
+    } catch (error: any) {
+      res.status(400).json({
+        success: false,
+        message: error.message,
+      });
+    }
+  };
+
+  promoteUserToEC = async (req: Request, res: Response) => {
+    try {
+      const userIdParam = req.params.userId;
+      const userId = parseInt(
+        Array.isArray(userIdParam) ? userIdParam[0] : userIdParam,
+      );
+
+      if (isNaN(userId)) {
+        return res.status(400).json({
+          success: false,
+          message: "User ID ไม่ถูกต้อง",
+        });
+      }
+
+      const user = await this.adminService.promoteUserToEC(userId);
+
+      res.status(200).json({
+        success: true,
+        message: "เปลี่ยน Role เป็น EC สำเร็จ",
+        data: user,
+      });
+    } catch (error: any) {
+      res.status(400).json({
+        success: false,
+        message: error.message,
+      });
+    }
+  };
+
   getUserById = async (req: Request, res: Response) => {
     try {
       const idParam = req.params.id;
@@ -60,10 +107,6 @@ export class AdminController {
     }
   };
 
-  /**
-   * PUT /api/admin/user/:id
-   * Update user (Admin only)
-   */
   updateUser = async (req: Request, res: Response) => {
     try {
       const idParam = req.params.id;
@@ -97,10 +140,6 @@ export class AdminController {
     }
   };
 
-  /**
-   * PATCH /api/admin/demote-voter/:userId
-   * Demote EC to Voter (Admin only)
-   */
   demoteECToVoter = async (req: Request, res: Response) => {
     try {
       const userIdParam = req.params.userId;
@@ -130,69 +169,6 @@ export class AdminController {
     }
   };
 
-  /**
-   * POST /api/admin/constituency
-   * สร้างเขตเลือกตั้งใหม่ (Admin only)
-   */
-  createConstituency = async (req: Request, res: Response) => {
-    try {
-      const { province, districtNumber } = req.body;
-
-      const constituency = await this.adminService.createConstituency({
-        province,
-        districtNumber,
-      });
-
-      res.status(201).json({
-        success: true,
-        message: "สร้างเขตเลือกตั้งสำเร็จ",
-        data: constituency,
-      });
-    } catch (error: any) {
-      res.status(400).json({
-        success: false,
-        message: error.message,
-      });
-    }
-  };
-
-  /**
-   * PATCH /api/admin/promote-ec/:userId
-   * เปลี่ยน Role ของ User จาก Voter เป็น EC (Admin only)
-   */
-  promoteUserToEC = async (req: Request, res: Response) => {
-    try {
-      const userIdParam = req.params.userId;
-      const userId = parseInt(
-        Array.isArray(userIdParam) ? userIdParam[0] : userIdParam,
-      );
-
-      if (isNaN(userId)) {
-        return res.status(400).json({
-          success: false,
-          message: "User ID ไม่ถูกต้อง",
-        });
-      }
-
-      const user = await this.adminService.promoteUserToEC(userId);
-
-      res.status(200).json({
-        success: true,
-        message: "เปลี่ยน Role เป็น EC สำเร็จ",
-        data: user,
-      });
-    } catch (error: any) {
-      res.status(400).json({
-        success: false,
-        message: error.message,
-      });
-    }
-  };
-
-  /**
-   * GET /api/admin/constituencies
-   * ดึงรายการเขตเลือกตั้งทั้งหมด (Admin only)
-   */
   getAllConstituencies = async (req: Request, res: Response) => {
     try {
       const constituencies = await this.adminService.getAllConstituencies();
@@ -209,10 +185,6 @@ export class AdminController {
     }
   };
 
-  /**
-   * GET /api/admin/constituency/:id
-   * ดึงเขตเลือกตั้งตาม ID (Admin only)
-   */
   getConstituencyById = async (req: Request, res: Response) => {
     try {
       const idParam = req.params.id;
@@ -239,10 +211,6 @@ export class AdminController {
     }
   };
 
-  /**
-   * PUT /api/admin/constituency/:id
-   * อัปเดตเขตเลือกตั้ง (Admin only)
-   */
   updateConstituency = async (req: Request, res: Response) => {
     try {
       const idParam = req.params.id;
@@ -275,10 +243,6 @@ export class AdminController {
     }
   };
 
-  /**
-   * DELETE /api/admin/constituency/:id
-   * ลบเขตเลือกตั้ง (Admin only)
-   */
   deleteConstituency = async (req: Request, res: Response) => {
     try {
       const idParam = req.params.id;
@@ -305,10 +269,6 @@ export class AdminController {
     }
   };
 
-  /**
-   * PATCH /api/admin/constituency/:id/toggle-status
-   * เปิด/ปิดการลงคะแนนในเขต (Admin only)
-   */
   toggleConstituencyStatus = async (req: Request, res: Response) => {
     try {
       const idParam = req.params.id;

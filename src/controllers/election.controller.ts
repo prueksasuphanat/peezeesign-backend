@@ -510,6 +510,8 @@ export class ElectionController {
         });
       }
 
+      console.log('req.file', req)
+
       if (!req.file) {
         return res.status(400).json({
           success: false,

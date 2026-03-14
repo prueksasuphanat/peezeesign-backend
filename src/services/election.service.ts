@@ -218,6 +218,7 @@ export class ElectionService {
         logoUrl: party.logoUrl,
         policy: party.policy,
         totalElectedMPs,
+        totalCandidates: party.candidates.length,
       };
     });
   };

@@ -5,8 +5,8 @@ dotenv.config();
 
 export const BUCKET_NAME = process.env.SUPABASE_BUCKET_NAME || "image";
 
-const accessKeyId = process.env.SUPABASE_ANON_KEY || "";
-const secretAccessKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+const accessKeyId = process.env.SUPABASE_S3_ACCESS_KEY || process.env.SUPABASE_PROJECT_ID || process.env.SUPABASE_ANON_KEY || "";
+const secretAccessKey = process.env.SUPABASE_S3_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || "";
 
 const s3Endpoint =
   process.env.SUPABASE_S3_ENDPOINT || process.env.SUPABASE_URL || "";

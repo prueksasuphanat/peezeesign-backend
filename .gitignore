@@ -13,8 +13,6 @@ ehthumbs.db
 Desktop.ini
 $RECYCLE.BIN/
 *.stackdump
-.claude/
-.agents/
 
 # Temporary files
 *.swp
@@ -83,7 +81,7 @@ venv/
 ENV/
 env/
 .env
-.env.*
+# .env.*
 .envrc
 pip-wheel-metadata/
 .eggs/
@@ -179,9 +177,8 @@ Dockerfile.local
 *.DS_Store?
 *.icloud
 
-skills-lock.json
-
 package-lock.json
+
 
 /src/generated/prisma
 /prisma/migrations/20251216203540_add_organizer/migration.sql

@@ -2,6 +2,7 @@ import { Router } from "express";
 import { ElectionController } from "../controllers/election.controller";
 import { authenticate } from "../middlewares/auth.middleware";
 import { authorize } from "../middlewares/role.middleware";
+import { upload } from "../middlewares/upload.middleware";
 
 const router = Router();
 const electionController = new ElectionController();
@@ -119,6 +120,7 @@ router.post(
   "/party/:id/logo",
   authenticate,
   authorize("EC"),
+  upload.single("file"),
   electionController.uploadPartyLogo,
 );
 
